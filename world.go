@@ -1,97 +1,81 @@
 package main
 
+import "fmt"
+
 type World struct {
-	users        []*User
-	startRoom    string
-	roomsById    map[string]*Room
-	usersToRooms map[string]string
+	characters []*Character
+	rooms      []*Room
 }
 
-func (w *World) GetUser(id string) *User {
-	for _, u := range w.users {
-		if u.id == id {
-			return u
+func NewWorld() *World {
+	return &World{}
+}
+
+func (w *World) Init() {
+	w.rooms = []*Room{
+		{
+			Id:   "A",
+			Desc: "This is a room with a sign that has the letter A written on it.",
+			Links: []*RoomLink{
+				{
+					Verb:   "east",
+					RoomId: "B",
+				},
+			},
+		},
+		{
+			Id:   "B",
+			Desc: "This is a room with a sign that has the letter B written on it.",
+			Links: []*RoomLink{
+				{
+					Verb:   "west",
+					RoomId: "A",
+				},
+			},
+		},
+	}
+}
+
+func (w *World) HandleCharacterJoined(character *Character) {
+	w.rooms[0].AddCharacter(character)
+
+	character.SendMessage("Welcome!")
+	character.SendMessage("")
+	character.SendMessage(character.Room.Desc)
+}
+
+func (w *World) GetRoomById(id string) *Room {
+	for _, r := range w.rooms {
+		if r.Id == id {
+			return r
 		}
 	}
 	return nil
 }
 
-func (w *World) GetRoom(id string) *Room {
-	return w.roomsById[id]
-}
-
-func (w *World) GetUsersInRoom(roomId string) []*User {
-	var users []*User
-	for u, r := range w.usersToRooms {
-		if r == roomId {
-			users = append(users, w.GetUser(u))
+func (w *World) HandleCharacterInput(character *Character, input string) {
+	room := character.Room
+	for _, link := range room.Links {
+		if link.Verb == input {
+			target := w.GetRoomById(link.RoomId)
+			if target != nil {
+				w.MoveCharacter(character, target)
+				return
+			}
 		}
 	}
-	return users
-}
 
-func (w *World) Broadcast(user *User, msg string) {
-	room := w.GetRoom(w.usersToRooms[user.id])
-	for _, other := range w.GetUsersInRoom(room.id) {
-		if other != user {
-			other.session.WriteLine(msg)
-		}
-	}
-}
+	character.SendMessage(fmt.Sprintf("You said, \"%s\"", input))
 
-func (w *World) AddToRoom(user *User, roomId string) {
-	prevRoom := w.GetRoom(roomId)
-	if prevRoom != nil {
-
-	}
-
-	w.usersToRooms[user.id] = roomId
-	room := w.GetRoom(roomId)
-	user.session.WriteLine(room.desc)
-}
-
-func (w *World) Move(user *User, dir string) {
-	room := w.GetRoom(w.usersToRooms[user.id])
-	for _, link := range room.links {
-		if link.verb == dir {
-			w.AddToRoom(user, link.roomId)
+	for _, other := range character.Room.Characters {
+		if other != character {
+			other.SendMessage(fmt.Sprintf("%s said, \"%s\"", character.Name, input))
 		}
 	}
 }
 
-func createWorld() *World {
-	rooms := []*Room{
-		{
-			id:   "A",
-			desc: "This is a room with a sign that has the letter A written on it.",
-			links: []*RoomLink{
-				{
-					verb:   "east",
-					roomId: "B",
-				},
-			},
-		},
-		{
-			id:   "B",
-			desc: "This is a room with a sign that has the letter B written on it.",
-			links: []*RoomLink{
-				{
-					verb:   "west",
-					roomId: "A",
-				},
-			},
-		},
-	}
-
-	w := &World{
-		usersToRooms: map[string]string{},
-		roomsById:    map[string]*Room{},
-		startRoom:    rooms[0].id,
-	}
-
-	for _, room := range rooms {
-		w.roomsById[room.id] = room
-	}
-
-	return w
+func (world *World) MoveCharacter(character *Character, to *Room) {
+	character.Room.RemoveCharacter(character)
+	to.AddCharacter(character)
+	character.SendMessage(to.Desc)
 }
